@@ -1,8 +1,11 @@
--- SELECT * FROM bank_dataset
--- SELECT * FROM fmcg_dataset
--- SELECT * FROM it_dataset
+-- Viewing all data from each table
+
+SELECT * FROM bank_dataset
+SELECT * FROM fmcg_dataset
+SELECT * FROM it_dataset
 
 
+--  Adding new column sector
 
 ALTER TABLE bank_dataset
 ADD COLUMN sector VARCHAR(50);
@@ -13,9 +16,15 @@ ADD COLUMN sector VARCHAR(50);
 ALTER TABLE it_dataset
 ADD COLUMN sector VARCHAR(50);
 
+
+-- Updating column field sector
+
 UPDATE bank_dataset SET sector = 'BANK';
 UPDATE fmcg_dataset SET sector = 'FMCG';
 UPDATE it_dataset SET sector = 'IT';
+
+
+-- Creating view with selecting high and low price for all sector
 
 CREATE VIEW A1 as (
 SELECT sector,high,low FROM bank_dataset b
@@ -24,10 +33,16 @@ SELECT sector,high,low FROM fmcg_dataset	f
 UNION
 SELECT sector,high,low FROM it_dataset i);
 
+
+-- Calculating volatility
+
 SELECT sector,AVG(High - Low) as avg_volatility, 
 	   dense_rank() OVER(ORDER BY avg(high - low) asc) AS ranking
 FROM A1
 GROUP BY sector;
+
+
+-- Finding pre_covid and post_covid price for each sector
 
 SET @pre_covid_price_it = (SELECT close FROM it_dataset WHERE DATE = '2020-02-20');
 SET @post_covid_price_it = (SELECT close FROM it_dataset WHERE DATE = '2020-03-23');
@@ -38,11 +53,17 @@ SET @post_covid_price_fmcg = (SELECT close FROM fmcg_dataset WHERE DATE = '2020-
 SET @pre_covid_price_bank = (SELECT close FROM bank_dataset WHERE DATE = '2020-02-20');
 SET @post_covid_price_bank = (SELECT close FROM bank_dataset WHERE DATE = '2020-03-23');
 
+
+-- Calculatin Drawdown in covid period
+
 SELECT ROUND(100.0*(@post_covid_price_it - @pre_covid_price_it)/@pre_covid_price_it,4) AS it_DrawDown;
 
 SELECT ROUND(100.0*(@post_covid_price_fmcg - @pre_covid_price_fmcg)/@pre_covid_price_fmcg,4) AS fmcg_DrawDown;
 
 SELECT ROUND(100.0*(@post_covid_price_bank - @pre_covid_price_bank)/@pre_covid_price_bank,4) AS bank_DrawDown;
+
+
+-- Finding recovery days that means how many days take to get closing price is greater then or equal to pre_covid price after covid period
 
 SET @recovery_date_it = (SELECT date FROM it_dataset WHERE close > @pre_covid_price_it AND date > '2020-02-20' 
 						 ORDER BY date LIMIT 1);
@@ -55,6 +76,9 @@ SELECT DATEDIFF(@recovery_date_fmcg,'2020-02-20') AS recovery_date_fmcg;
 SET @recovery_date_bank = (SELECT date FROM bank_dataset WHERE close > @pre_covid_price_bank AND date > '2020-02-20' 
 						 ORDER BY date LIMIT 1);
 SELECT DATEDIFF(@recovery_date_bank,'2020-02-20') AS recovery_date_bank;
+
+
+-- Calculating strenght that means how many days closing price is greater then the previous days closing price.
 
 WITH CTE AS(
 	SELECT sector,SUM(IF((close>prvs_close),1,0)) AS higher_closed_price_days
@@ -69,10 +93,16 @@ WITH CTE AS(
 	FROM (SELECT sector,date,close,(LAG(close) OVER(ORDER BY date)) AS prvs_close FROM bank_dataset) a
 	GROUP BY sector)
 	SELECT * FROM CTE ORDER BY higher_closed_price_days;
-    
+
+
+-- Finding number of years for that dataset is considered
+
 SET @number_of_years = (SELECT (MAX(year) - MIN(year)) 
 						FROM (SELECT YEAR(date) as year FROM it_dataset GROUP BY YEAR(date)) a);
 SELECT @number_of_years;
+
+
+-- Calculating CAGR for each sector in specified number of years
 
 SET @begin_price_it = (SELECT close FROM it_dataset WHERE date = '2011-02-01');
 SET @end_price_it = (SELECT close FROM it_dataset WHERE date = '2022-08-01');
@@ -91,6 +121,9 @@ UNION
 SELECT 'bank_CAGR' AS Category,ROUND((POWER((@end_price_bank/@begin_price_bank),(1/@number_of_years)) - 1)*100,4) AS CAGR)
 SELECT * FROM CTE1 ORDER BY CAGR;
 
+
+-- Creating new table called score to calculate and store score for individual sector
+
 CREATE TABLE Score_Table (Sector varchar(50), `Description` VARCHAR(100), Score INT);
 
 INSERT INTO Score_Table (Sector, `Description`, Score)
@@ -101,6 +134,8 @@ VALUES
 ("IT","Higher_close_above",1),("FMCG","Higher_close_above",3),("BANK","Higher_close_above",2),
 ("IT","CAGR",2),("FMCG","CAGR",3),("BANK","CAGR",1);
 
+
+-- Creating Weightage table for giving Weitage for considerd parameter such as volatility,cagr etc
 
 CREATE TABLE weightage_table(`Description` VARCHAR(100), Weightage decimal(2,2));
 
@@ -114,6 +149,9 @@ VALUES
 
 SELECT * FROM Score_Table;
 SELECT * FROM weightage_table;
+
+
+-- Finding Final score for each sector
 
 SELECT Sector, SUM(ROUND((Score*Weightage),10)) AS final_score FROM Score_Table st INNER JOIN weightage_table wt
 ON st.`Description` = wt.`Description`
