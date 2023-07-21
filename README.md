@@ -37,3 +37,4 @@ The analysis performed in this repository is for educational and informational p
 
 Thank you for your interest in the Stock Market Analysis with SQL project. Happy querying and analyzing the stock market data! 📈📊
 
+*Contributer [Saurabh6912](https://github.com/Saurabh6912)*
